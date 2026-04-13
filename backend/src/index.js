@@ -6,6 +6,7 @@ import chatRoutes from "./routes/chat.routes.js";
 import vapiRoutes from "./routes/vapi.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
+import toolsRoutes from "./routes/tools.routes.js";
 
 const app = express();
 
@@ -39,6 +40,7 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/vapi", vapiRoutes);
 app.use("/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/tools", toolsRoutes);
 
 // Start server
 async function start() {
