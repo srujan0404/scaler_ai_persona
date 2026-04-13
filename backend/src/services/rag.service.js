@@ -28,17 +28,37 @@ export async function ingestDocument({ source, category, content, metadata = {} 
 export async function retrieveContext(query, maxChunks = 8) {
   const db = getDb();
 
+  // Ensure text index exists
   try {
     await db.collection(CHUNKS_COLLECTION).createIndex(
       { content: "text", keywords: "text", source: "text" },
       { name: "rag_text_index" }
     );
-  } catch {
+  } catch {}
+
+  const results = [];
+  const seenIds = new Set();
+
+  function addResult(doc) {
+    const id = doc._id.toString();
+    if (!seenIds.has(id) && results.length < maxChunks) {
+      seenIds.add(id);
+      results.push(doc);
+    }
   }
 
-  let results = [];
+  // Step 1: ALWAYS get resume chunks for the detected category first
+  // Resume data should be prioritized over GitHub repos for core questions
+  const category = classifyQuery(query);
+  const resumeChunks = await db
+    .collection(CHUNKS_COLLECTION)
+    .find({ source: "resume", category })
+    .toArray();
+  resumeChunks.forEach(addResult);
+
+  // Step 2: MongoDB full-text search (finds both resume + GitHub matches)
   try {
-    results = await db
+    const textResults = await db
       .collection(CHUNKS_COLLECTION)
       .find(
         { $text: { $search: query } },
@@ -47,49 +67,35 @@ export async function retrieveContext(query, maxChunks = 8) {
       .sort({ score: { $meta: "textScore" } })
       .limit(maxChunks)
       .toArray();
-  } catch {
-  }
+    textResults.forEach(addResult);
+  } catch {}
 
+  // Step 3: Keyword regex fallback
   if (results.length < maxChunks) {
     const queryWords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
     const regexPatterns = queryWords.map((w) => new RegExp(w, "i"));
-
-    const existingIds = new Set(results.map((r) => r._id.toString()));
 
     const keywordResults = await db
       .collection(CHUNKS_COLLECTION)
       .find({
         $or: [
-          ...regexPatterns.map((pattern) => ({ content: pattern })),
-          ...regexPatterns.map((pattern) => ({ keywords: pattern })),
-          ...regexPatterns.map((pattern) => ({ category: pattern })),
+          ...regexPatterns.map((p) => ({ content: p })),
+          ...regexPatterns.map((p) => ({ keywords: p })),
         ],
       })
       .limit(maxChunks * 2)
       .toArray();
-
-    for (const doc of keywordResults) {
-      if (!existingIds.has(doc._id.toString()) && results.length < maxChunks) {
-        results.push(doc);
-        existingIds.add(doc._id.toString());
-      }
-    }
+    keywordResults.forEach(addResult);
   }
 
+  // Step 4: Category fallback if still too few
   if (results.length < 3) {
-    const category = classifyQuery(query);
     const categoryResults = await db
       .collection(CHUNKS_COLLECTION)
       .find({ category })
       .limit(maxChunks)
       .toArray();
-
-    const existingIds = new Set(results.map((r) => r._id.toString()));
-    for (const doc of categoryResults) {
-      if (!existingIds.has(doc._id.toString()) && results.length < maxChunks) {
-        results.push(doc);
-      }
-    }
+    categoryResults.forEach(addResult);
   }
 
   return results.map((r) => ({
