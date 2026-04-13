@@ -94,42 +94,98 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen max-h-screen">
+    <div className="relative z-10 flex flex-col h-screen max-h-screen">
       {/* Header */}
-      <header className="border-b border-gray-800 px-4 py-3 flex items-center gap-3 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-lg">
-          S
+      <header
+        className="px-5 py-4 flex items-center gap-4 sticky top-0 z-20"
+        style={{
+          background: "var(--bg)",
+          borderBottom: "1px solid var(--rule)",
+        }}
+      >
+        {/* Accent-cornered avatar */}
+        <div className="relative">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium"
+            style={{ background: "var(--bg-2)", color: "var(--ink)", border: "1px solid var(--rule)" }}
+          >
+            SD
+          </div>
+          {/* Pulse dot */}
+          <span
+            className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+            style={{
+              background: "var(--accent)",
+              boxShadow: "0 0 6px var(--accent), 0 0 12px rgba(255, 74, 31, 0.3)",
+              animation: "pulse-dot 2s infinite ease-in-out",
+            }}
+          />
         </div>
         <div>
-          <h1 className="font-semibold text-white">Srujan Reddy Dharma</h1>
-          <p className="text-xs text-gray-400">
-            AI Persona &middot; SDE Intern @ Pazcare &middot; Scaler SoT &amp;
-            BITS
+          <h1 className="text-sm font-medium" style={{ color: "var(--ink)" }}>
+            Srujan Reddy Dharma
+          </h1>
+          <p className="mono-label mt-0.5">
+            SDE Intern @ Pazcare &middot; Scaler SoT &amp; BITS
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-gray-400">Online</span>
+          <span className="mono-label">Available</span>
+          <span
+            className="w-1.5 h-1.5 rounded-full"
+            style={{
+              background: "var(--accent)",
+              boxShadow: "0 0 4px var(--accent)",
+            }}
+          />
         </div>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5">
         {messages.map((msg, i) => (
           <div
             key={i}
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
+            {msg.role === "assistant" && (
+              <div
+                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center mr-3 mt-1"
+                style={{
+                  background: "var(--bg-2)",
+                  border: "1px solid var(--rule)",
+                  fontSize: "0.6rem",
+                  color: "var(--ink-low)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                AI
+              </div>
+            )}
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+              className={`max-w-[75%] px-4 py-3 text-sm ${
                 msg.role === "user"
-                  ? "bg-indigo-600 text-white rounded-br-md"
-                  : "bg-gray-800 text-gray-100 rounded-bl-md"
+                  ? "rounded-2xl rounded-br-sm"
+                  : "rounded-2xl rounded-bl-sm"
               }`}
+              style={
+                msg.role === "user"
+                  ? {
+                      background: "var(--bg-2)",
+                      color: "var(--ink)",
+                      border: "1px solid var(--rule)",
+                    }
+                  : {
+                      background: "transparent",
+                      color: "var(--ink)",
+                    }
+              }
             >
               {msg.role === "assistant" ? (
                 <div className="markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
               ) : (
                 <span className="whitespace-pre-wrap">{msg.content}</span>
@@ -140,24 +196,58 @@ export default function ChatPage() {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-800 rounded-2xl rounded-bl-md px-4 py-3 flex gap-1.5">
-              <span className="typing-dot w-2 h-2 rounded-full bg-gray-400" />
-              <span className="typing-dot w-2 h-2 rounded-full bg-gray-400" />
-              <span className="typing-dot w-2 h-2 rounded-full bg-gray-400" />
+            <div
+              className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center mr-3"
+              style={{
+                background: "var(--bg-2)",
+                border: "1px solid var(--rule)",
+                fontSize: "0.6rem",
+                color: "var(--ink-low)",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              AI
+            </div>
+            <div className="flex gap-1.5 py-3">
+              <span
+                className="typing-dot w-1.5 h-1.5 rounded-full"
+                style={{ background: "var(--ink-low)" }}
+              />
+              <span
+                className="typing-dot w-1.5 h-1.5 rounded-full"
+                style={{ background: "var(--ink-low)" }}
+              />
+              <span
+                className="typing-dot w-1.5 h-1.5 rounded-full"
+                style={{ background: "var(--ink-low)" }}
+              />
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggested questions (only show at start) */}
+      {/* Suggested questions */}
       {messages.length <= 1 && (
-        <div className="px-4 pb-2 flex flex-wrap gap-2 justify-center">
+        <div className="px-5 pb-3 flex flex-wrap gap-2 justify-center">
           {SUGGESTED_QUESTIONS.map((q) => (
             <button
               key={q}
               onClick={() => sendMessage(q)}
-              className="text-xs px-3 py-1.5 rounded-full border border-gray-700 text-gray-300 hover:bg-gray-800 hover:border-gray-600 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-full transition-all duration-200"
+              style={{
+                border: "1px solid var(--rule)",
+                color: "var(--ink-mid)",
+                background: "transparent",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--accent)";
+                e.currentTarget.style.color = "var(--ink)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--rule)";
+                e.currentTarget.style.color = "var(--ink-mid)";
+              }}
             >
               {q}
             </button>
@@ -166,8 +256,11 @@ export default function ChatPage() {
       )}
 
       {/* Input */}
-      <div className="border-t border-gray-800 p-4 bg-gray-950/80 backdrop-blur-sm">
-        <div className="max-w-3xl mx-auto flex gap-2 items-end">
+      <div
+        className="px-5 py-4"
+        style={{ borderTop: "1px solid var(--rule)", background: "var(--bg)" }}
+      >
+        <div className="max-w-3xl mx-auto flex gap-3 items-end">
           <textarea
             ref={inputRef}
             value={input}
@@ -175,18 +268,45 @@ export default function ChatPage() {
             onKeyDown={handleKeyDown}
             placeholder="Ask about Srujan's background, skills, or book a meeting..."
             rows={1}
-            className="flex-1 resize-none rounded-xl border border-gray-700 bg-gray-900 px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            className="flex-1 resize-none rounded-lg px-4 py-3 text-sm transition-colors duration-200"
+            style={{
+              background: "var(--bg-2)",
+              color: "var(--ink)",
+              border: "1px solid var(--rule)",
+              outline: "none",
+              fontFamily: "var(--font-inter), Inter, sans-serif",
+              letterSpacing: "-0.011em",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "var(--accent)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--rule)";
+            }}
           />
           <button
             onClick={() => sendMessage()}
             disabled={isLoading || !input.trim()}
-            className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--accent)",
+              color: "var(--bg)",
+            }}
+            onMouseEnter={(e) => {
+              if (!e.currentTarget.disabled)
+                e.currentTarget.style.opacity = "0.85";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = "1";
+            }}
           >
             Send
           </button>
         </div>
-        <p className="text-center text-xs text-gray-600 mt-2">
-          RAG-grounded AI persona &middot; Based on real resume and GitHub data
+        <p
+          className="text-center mt-2 mono-label"
+        >
+          RAG-grounded AI persona &middot; Resume + GitHub data
         </p>
       </div>
     </div>
