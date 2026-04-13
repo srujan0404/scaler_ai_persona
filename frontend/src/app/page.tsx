@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   role: "user" | "assistant";
@@ -127,8 +128,8 @@ export default function ChatPage() {
               }`}
             >
               {msg.role === "assistant" ? (
-                <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:my-2 prose-table:my-2 prose-th:px-3 prose-th:py-1.5 prose-td:px-3 prose-td:py-1.5 prose-th:bg-gray-700/50 prose-tr:border-gray-700 prose-strong:text-white prose-a:text-indigo-400">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 </div>
               ) : (
                 <span className="whitespace-pre-wrap">{msg.content}</span>
