@@ -47,9 +47,17 @@ export async function retrieveContext(query, maxChunks = 8) {
     }
   }
 
-  // Step 1: ALWAYS get resume chunks for the detected category first
-  // Resume data should be prioritized over GitHub repos for core questions
+  // Step 0: ALWAYS get featured chunks for the detected category first
+  // Featured chunks are curated, high-quality summaries that should surface first
   const category = classifyQuery(query);
+  const featuredChunks = await db
+    .collection(CHUNKS_COLLECTION)
+    .find({ "metadata.featured": true, category })
+    .sort({ priority: -1 })
+    .toArray();
+  featuredChunks.forEach(addResult);
+
+  // Step 1: Get resume chunks for the detected category
   const resumeChunks = await db
     .collection(CHUNKS_COLLECTION)
     .find({ source: "resume", category })
