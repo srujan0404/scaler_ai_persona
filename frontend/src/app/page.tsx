@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   role: "user" | "assistant";
@@ -119,13 +120,19 @@ export default function ChatPage() {
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 msg.role === "user"
                   ? "bg-indigo-600 text-white rounded-br-md"
                   : "bg-gray-800 text-gray-100 rounded-bl-md"
               }`}
             >
-              {msg.content}
+              {msg.role === "assistant" ? (
+                <div className="prose prose-sm prose-invert max-w-none prose-p:my-1 prose-li:my-0.5 prose-headings:my-2 prose-table:my-2 prose-th:px-3 prose-th:py-1.5 prose-td:px-3 prose-td:py-1.5 prose-th:bg-gray-700/50 prose-tr:border-gray-700 prose-strong:text-white prose-a:text-indigo-400">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              ) : (
+                <span className="whitespace-pre-wrap">{msg.content}</span>
+              )}
             </div>
           </div>
         ))}
