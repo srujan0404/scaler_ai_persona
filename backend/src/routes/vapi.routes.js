@@ -1,31 +1,9 @@
 import { Router } from "express";
 import { getAvailableSlots, bookSlot } from "../services/booking.service.js";
-import { getKnowledgeBase } from "../services/knowledge.service.js";
+import { retrieveContext } from "../services/rag.service.js";
 
 const router = Router();
 
-/**
- * Vapi sends a POST request to this endpoint when the LLM calls a tool.
- * The request body contains the tool call details.
- * We process the tool and return the result.
- *
- * Vapi webhook format:
- * {
- *   "message": {
- *     "type": "tool-calls",
- *     "toolCallList": [
- *       {
- *         "id": "...",
- *         "type": "function",
- *         "function": {
- *           "name": "get_available_slots",
- *           "arguments": {}
- *         }
- *       }
- *     ]
- *   }
- * }
- */
 router.post("/webhook", async (req, res) => {
   try {
     const { message } = req.body;
@@ -34,7 +12,6 @@ router.post("/webhook", async (req, res) => {
       return res.status(400).json({ error: "No message in request" });
     }
 
-    // Handle different Vapi message types
     switch (message.type) {
       case "tool-calls":
         return handleToolCalls(message, res);
@@ -48,7 +25,6 @@ router.post("/webhook", async (req, res) => {
         return res.json({ ok: true });
 
       case "function-call":
-        // Legacy format
         return handleLegacyFunctionCall(message, res);
 
       default:
@@ -79,7 +55,6 @@ async function handleToolCalls(message, res) {
     switch (functionName) {
       case "get_available_slots": {
         const slots = await getAvailableSlots(7);
-        // Group by date for voice-friendly summary
         const byDate = {};
         for (const s of slots) {
           if (!byDate[s.date]) byDate[s.date] = [];
@@ -94,9 +69,10 @@ async function handleToolCalls(message, res) {
             slots: times,
             range: `${times[0]} - ${times[times.length - 1]} IST`,
           })),
-          message: slots.length > 0
-            ? `I have availability on the following days: ${summary}. Each slot is 30 minutes. Which date and time works for you?`
-            : "No available slots in the next 7 days.",
+          message:
+            slots.length > 0
+              ? `I have availability on the following days: ${summary}. Each slot is 30 minutes. Which date and time works for you?`
+              : "No available slots in the next 7 days.",
         };
         break;
       }
@@ -114,9 +90,15 @@ async function handleToolCalls(message, res) {
       }
 
       case "get_background_info": {
-        const kb = await getKnowledgeBase();
-        const topic = args.topic || "general";
-        result = getRelevantInfo(kb, topic);
+        // RAG-grounded retrieval — fetches from actual resume and GitHub data
+        const query = args.question || args.topic || "general background";
+        const chunks = await retrieveContext(query, 6);
+        const context = chunks.map((c) => c.content).join("\n\n");
+        result = {
+          context,
+          source: chunks.map((c) => c.source).join(", "),
+          note: "This information was retrieved from Srujan's actual resume and GitHub repositories via RAG. Use ONLY this context to answer.",
+        };
         break;
       }
 
@@ -148,11 +130,15 @@ async function handleLegacyFunctionCall(message, res) {
   switch (functionName) {
     case "get_available_slots": {
       const slots = await getAvailableSlots(7);
-      const nextSlots = slots.slice(0, 8);
-      result =
-        nextSlots.length > 0
-          ? `Available slots: ${nextSlots.map((s) => `${s.date} at ${s.time} IST`).join(", ")}`
-          : "No available slots in the next 7 days.";
+      const byDate = {};
+      for (const s of slots) {
+        if (!byDate[s.date]) byDate[s.date] = [];
+        byDate[s.date].push(s.time);
+      }
+      const summary = Object.entries(byDate)
+        .map(([d, t]) => `${d}: ${t[0]}-${t[t.length - 1]}`)
+        .join("; ");
+      result = summary || "No available slots.";
       break;
     }
     case "book_meeting": {
@@ -163,8 +149,9 @@ async function handleLegacyFunctionCall(message, res) {
       break;
     }
     case "get_background_info": {
-      const kb = await getKnowledgeBase();
-      result = JSON.stringify(getRelevantInfo(kb, args.topic || "general"));
+      const query = args.question || args.topic || "general";
+      const chunks = await retrieveContext(query, 6);
+      result = chunks.map((c) => c.content).join("\n\n");
       break;
     }
     default:
@@ -172,41 +159,6 @@ async function handleLegacyFunctionCall(message, res) {
   }
 
   res.json({ result });
-}
-
-function getRelevantInfo(kb, topic) {
-  const topicLower = topic.toLowerCase();
-  const info = {};
-
-  if (topicLower.includes("education") || topicLower.includes("school") || topicLower.includes("college")) {
-    info.education = kb.education;
-  }
-  if (topicLower.includes("experience") || topicLower.includes("work") || topicLower.includes("job")) {
-    info.experience = kb.experience;
-  }
-  if (topicLower.includes("skill") || topicLower.includes("tech")) {
-    info.skills = kb.skills;
-  }
-  if (topicLower.includes("project") || topicLower.includes("github") || topicLower.includes("repo")) {
-    info.projects = kb.projects;
-  }
-  if (topicLower.includes("why") || topicLower.includes("fit") || topicLower.includes("role")) {
-    info.whyThisRole = kb.whyThisRole;
-  }
-
-  // If no specific match, return everything
-  if (Object.keys(info).length === 0) {
-    return {
-      personal: kb.personal,
-      education: kb.education,
-      experience: kb.experience,
-      skills: kb.skills,
-      projects: kb.projects,
-      whyThisRole: kb.whyThisRole,
-    };
-  }
-
-  return info;
 }
 
 export default router;
