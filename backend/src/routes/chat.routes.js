@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { chatWithRAG, chatCompletion } from "../services/groq.service.js";
-import { getKnowledgeBase } from "../services/knowledge.service.js";
+import { chatCompletion } from "../services/groq.service.js";
+import { retrieveContext } from "../services/rag.service.js";
 import { getAvailableSlots, bookSlot } from "../services/booking.service.js";
 
 const router = Router();
@@ -25,9 +25,12 @@ router.post("/", async (req, res) => {
     // Add user message to history first
     history.push({ role: "user", content: message });
 
-    // Get knowledge base
-    const knowledgeBase = await getKnowledgeBase();
-    const systemPrompt = buildSystemPromptFromKB(knowledgeBase);
+    const retrievedChunks = await retrieveContext(message, 8);
+    const ragContext = retrievedChunks
+      .map((c) => `[Source: ${c.source} | Category: ${c.category}]\n${c.content}`)
+      .join("\n\n---\n\n");
+
+    const systemPrompt = buildRAGPrompt(ragContext);
 
     // Build messages for LLM
     const llmMessages = [
@@ -62,7 +65,6 @@ router.post("/", async (req, res) => {
 
         if (toolName === "get_available_slots") {
           const slots = await getAvailableSlots(7);
-          // Group by date for a concise summary
           const byDate = {};
           for (const s of slots) {
             if (!byDate[s.date]) byDate[s.date] = [];
@@ -85,7 +87,6 @@ router.post("/", async (req, res) => {
           toolResult = JSON.stringify({ error: "Unknown tool" });
         }
 
-        // Add tool result to history
         history.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -93,7 +94,7 @@ router.post("/", async (req, res) => {
         });
       }
 
-      // Get final response after tool execution (no tools this time — force text reply)
+      // Get final response after tool execution (no tools — force text reply)
       const finalMessages = [
         { role: "system", content: systemPrompt },
         ...history,
@@ -104,7 +105,7 @@ router.post("/", async (req, res) => {
     // Add assistant response to history
     history.push({ role: "assistant", content: response.content });
 
-    // Keep history manageable — only keep user/assistant pairs (drop tool call messages)
+    // Keep history manageable
     if (history.length > 30) {
       const cleaned = history.filter(
         (m) => m.role === "user" || (m.role === "assistant" && !m.tool_calls)
@@ -128,41 +129,27 @@ router.delete("/:sessionId", (req, res) => {
   res.json({ success: true });
 });
 
-function buildSystemPromptFromKB(kb) {
-  return `You are an AI representative of ${kb.name}. You speak in first person as if you ARE ${kb.name}'s AI persona.
+function buildRAGPrompt(ragContext) {
+  return `You are an AI representative of Srujan Reddy Dharma. You speak in first person as his AI persona.
 
 ## Your Role
-You represent ${kb.name} in conversations. Answer questions about their background, skills, experience, and projects. Help schedule meetings.
+Answer questions about Srujan's background, skills, experience, and projects. Help schedule meetings.
 
 ## Rules
-1. ONLY use information from the knowledge base below. NEVER fabricate or invent facts.
-2. If you don't know something, say "I don't have that specific information, but you can ask ${kb.name} directly — want to book a meeting?"
-3. Be conversational, confident, and specific — cite project names, tech, metrics.
-4. Keep responses concise. Don't dump your entire resume in one answer.
-5. CRITICAL — For ANY question about availability, scheduling, or booking: you MUST call the get_available_slots tool first. NEVER guess availability. Some slots may already be booked. Always check with the tool before answering.
+1. ONLY use information from the RETRIEVED CONTEXT below. NEVER fabricate or invent facts.
+2. If the retrieved context doesn't contain the answer, say "I don't have that specific information, but you can ask Srujan directly — want to book a meeting?"
+3. Be conversational, confident, and specific — cite project names, tech, metrics from the context.
+4. Keep responses concise.
+5. CRITICAL — For ANY question about availability, scheduling, or booking: you MUST call the get_available_slots tool first. NEVER guess availability. Some slots may already be booked.
 6. To book a meeting, first call get_available_slots, then call book_meeting with the chosen slot.
-7. Stay honest. If probed on something not in your knowledge, admit you don't have that info.
-8. When asked "why should we hire you" or similar, give a compelling, specific answer grounded in real experience.
+7. Stay honest. Never hallucinate information not in the retrieved context.
+8. When asked "why should we hire you", give a compelling answer grounded ONLY in the retrieved context.
 
-## Knowledge Base
+## Retrieved Context (from RAG — real resume and GitHub data)
+${ragContext || "No relevant context found."}
 
-### Personal Info
-${kb.personal || "Not available."}
-
-### Education
-${kb.education || "Not available."}
-
-### Work Experience
-${kb.experience || "Not available."}
-
-### Skills
-${kb.skills || "Not available."}
-
-### Projects & GitHub Repos
-${kb.projects || "Not available."}
-
-### Why This Role
-${kb.whyThisRole || "Not available."}`;
+## Important
+The above context was retrieved from a vector/text search over Srujan's actual resume and GitHub repositories. It is NOT hardcoded. Different questions retrieve different chunks.`;
 }
 
 export default router;
