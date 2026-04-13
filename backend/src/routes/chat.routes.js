@@ -25,6 +25,8 @@ router.post("/", async (req, res) => {
     // Add user message to history first
     history.push({ role: "user", content: message });
 
+    let slotData = null;
+
     const retrievedChunks = await retrieveContext(message, 8);
     const ragContext = retrievedChunks
       .map((c) => `[Source: ${c.source} | Category: ${c.category}]\n${c.content}`)
@@ -70,15 +72,19 @@ router.post("/", async (req, res) => {
             if (!byDate[s.date]) byDate[s.date] = [];
             byDate[s.date].push(s.time);
           }
+          slotData = Object.entries(byDate).map(([date, times]) => ({
+            date,
+            slots: times,
+          }));
           toolResult = JSON.stringify({
-            available_dates: Object.entries(byDate).map(([date, times]) => ({
+            available_dates: slotData.map(({ date, slots: times }) => ({
               date,
               slots: times,
               range: `${times[0]} - ${times[times.length - 1]} IST`,
             })),
             total_available: slots.length,
             timezone: "Asia/Kolkata (IST)",
-            note: "All times are in IST. Slots are 30 minutes each.",
+            note: "IMPORTANT: Do NOT list or repeat the slots in your response. The UI will display clickable slot buttons automatically. Just say something like 'Here are the available slots — pick one below and I will book it for you.' Keep it to ONE short sentence.",
           });
         } else if (toolName === "book_meeting") {
           const result = await bookSlot(args);
@@ -113,10 +119,9 @@ router.post("/", async (req, res) => {
       conversations.set(sessionId, cleaned.slice(-20));
     }
 
-    res.json({
-      response: response.content,
-      sessionId,
-    });
+    const result = { response: response.content, sessionId };
+    if (slotData) result.slots = slotData;
+    res.json(result);
   } catch (error) {
     console.error("Chat error:", error);
     res.status(500).json({ error: "Failed to process message" });

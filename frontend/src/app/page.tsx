@@ -4,9 +4,15 @@ import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+interface SlotDate {
+  date: string;
+  slots: string[];
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
+  slots?: SlotDate[];
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -16,6 +22,125 @@ const SUGGESTED_QUESTIONS = [
   "What's on your GitHub?",
   "Can we book a meeting?",
 ];
+
+function formatDateShort(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" });
+}
+
+function formatDateFull(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatMonth(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { month: "short" }).toUpperCase();
+}
+
+function formatDay(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").getDate().toString();
+}
+
+function formatWeekday(dateStr: string) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { weekday: "short" }).toUpperCase();
+}
+
+function formatTime(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+function SlotPicker({
+  slots,
+  onSelect,
+  disabled,
+}: {
+  slots: SlotDate[];
+  onSelect: (date: string, time: string) => void;
+  disabled: boolean;
+}) {
+  const [selectedDate, setSelectedDate] = useState(slots[0]?.date || "");
+  const activeSlots =
+    slots.find((s) => s.date === selectedDate)?.slots || [];
+
+  // Split into morning / afternoon / evening
+  const morning = activeSlots.filter((t) => {
+    const h = parseInt(t.split(":")[0]);
+    return h < 12;
+  });
+  const afternoon = activeSlots.filter((t) => {
+    const h = parseInt(t.split(":")[0]);
+    return h >= 12 && h < 17;
+  });
+  const evening = activeSlots.filter((t) => {
+    const h = parseInt(t.split(":")[0]);
+    return h >= 17;
+  });
+
+  const sections = [
+    { label: "Morning", slots: morning },
+    { label: "Afternoon", slots: afternoon },
+    { label: "Evening", slots: evening },
+  ].filter((s) => s.slots.length > 0);
+
+  return (
+    <div className="slot-picker">
+      {/* Date selector - horizontal scroll */}
+      <div className="slot-dates">
+        {slots.map((day) => {
+          const isActive = day.date === selectedDate;
+          return (
+            <button
+              key={day.date}
+              onClick={() => setSelectedDate(day.date)}
+              className={`slot-date-btn ${isActive ? "active" : ""}`}
+            >
+              <span className="slot-date-weekday">
+                {formatWeekday(day.date)}
+              </span>
+              <span className="slot-date-day">{formatDay(day.date)}</span>
+              <span className="slot-date-month">
+                {formatMonth(day.date)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected date header */}
+      <p className="slot-date-header">{formatDateFull(selectedDate)}</p>
+
+      {/* Time slots grouped by period */}
+      <div className="slot-sections">
+        {sections.map((section) => (
+          <div key={section.label} className="slot-section">
+            <span className="mono-label">{section.label}</span>
+            <div className="slot-grid">
+              {section.slots.map((time) => (
+                <button
+                  key={time}
+                  onClick={() => onSelect(selectedDate, time)}
+                  disabled={disabled}
+                  className="slot-chip"
+                >
+                  {formatTime(time)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -69,7 +194,11 @@ export default function ChatPage() {
       } else {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: data.response },
+          {
+            role: "assistant",
+            content: data.response,
+            slots: data.slots || undefined,
+          },
         ]);
       }
     } catch {
@@ -93,6 +222,12 @@ export default function ChatPage() {
     }
   }
 
+  function handleSlotClick(date: string, time: string) {
+    sendMessage(
+      `Book me for ${formatDateFull(date)} at ${formatTime(time)} IST. Date: ${date}, Time: ${time}.`
+    );
+  }
+
   return (
     <div className="relative z-10 flex flex-col h-screen max-h-screen">
       {/* Header */}
@@ -103,20 +238,23 @@ export default function ChatPage() {
           borderBottom: "1px solid var(--rule)",
         }}
       >
-        {/* Accent-cornered avatar */}
         <div className="relative">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium"
-            style={{ background: "var(--bg-2)", color: "var(--ink)", border: "1px solid var(--rule)" }}
+            style={{
+              background: "var(--bg-2)",
+              color: "var(--ink)",
+              border: "1px solid var(--rule)",
+            }}
           >
             SD
           </div>
-          {/* Pulse dot */}
           <span
             className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
             style={{
               background: "var(--accent)",
-              boxShadow: "0 0 6px var(--accent), 0 0 12px rgba(255, 74, 31, 0.3)",
+              boxShadow:
+                "0 0 6px var(--accent), 0 0 12px rgba(255, 74, 31, 0.3)",
               animation: "pulse-dot 2s infinite ease-in-out",
             }}
           />
@@ -144,53 +282,65 @@ export default function ChatPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5">
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            {msg.role === "assistant" && (
+          <div key={i}>
+            <div
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              {msg.role === "assistant" && (
+                <div
+                  className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center mr-3 mt-1"
+                  style={{
+                    background: "var(--bg-2)",
+                    border: "1px solid var(--rule)",
+                    fontSize: "0.6rem",
+                    color: "var(--ink-low)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  AI
+                </div>
+              )}
               <div
-                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center mr-3 mt-1"
-                style={{
-                  background: "var(--bg-2)",
-                  border: "1px solid var(--rule)",
-                  fontSize: "0.6rem",
-                  color: "var(--ink-low)",
-                  fontFamily: "var(--font-mono)",
-                }}
+                className={`max-w-[75%] px-4 py-3 text-sm ${
+                  msg.role === "user"
+                    ? "rounded-2xl rounded-br-sm"
+                    : "rounded-2xl rounded-bl-sm"
+                }`}
+                style={
+                  msg.role === "user"
+                    ? {
+                        background: "var(--bg-2)",
+                        color: "var(--ink)",
+                        border: "1px solid var(--rule)",
+                      }
+                    : {
+                        background: "transparent",
+                        color: "var(--ink)",
+                      }
+                }
               >
-                AI
+                {msg.role === "assistant" ? (
+                  <div className="markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Slot picker widget */}
+            {msg.slots && msg.slots.length > 0 && (
+              <div className="ml-9 mt-3">
+                <SlotPicker
+                  slots={msg.slots}
+                  onSelect={handleSlotClick}
+                  disabled={isLoading}
+                />
               </div>
             )}
-            <div
-              className={`max-w-[75%] px-4 py-3 text-sm ${
-                msg.role === "user"
-                  ? "rounded-2xl rounded-br-sm"
-                  : "rounded-2xl rounded-bl-sm"
-              }`}
-              style={
-                msg.role === "user"
-                  ? {
-                      background: "var(--bg-2)",
-                      color: "var(--ink)",
-                      border: "1px solid var(--rule)",
-                    }
-                  : {
-                      background: "transparent",
-                      color: "var(--ink)",
-                    }
-              }
-            >
-              {msg.role === "assistant" ? (
-                <div className="markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <span className="whitespace-pre-wrap">{msg.content}</span>
-              )}
-            </div>
           </div>
         ))}
 
@@ -303,9 +453,7 @@ export default function ChatPage() {
             Send
           </button>
         </div>
-        <p
-          className="text-center mt-2 mono-label"
-        >
+        <p className="text-center mt-2 mono-label">
           RAG-grounded AI persona &middot; Resume + GitHub data
         </p>
       </div>
