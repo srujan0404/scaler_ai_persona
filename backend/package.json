@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "seed": "node src/data/seed.js"
+    "seed": "node src/data/seed.js",
+    "fetch-github": "node src/data/fetch-github.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
